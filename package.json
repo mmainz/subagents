@@ -5,6 +5,14 @@
   "type": "module",
   "description": "Automatically delegates matching Pi tasks to Markdown-configured subagents.",
   "main": "index.ts",
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
   "scripts": {
     "format": "bunx prettier --write .",
     "check": "bun run check:syntax && bun run eval:conversation-context",
@@ -16,10 +24,12 @@
     "eval:list": "bun evals/orchestration/run.ts --list"
   },
   "dependencies": {
-    "@mariozechner/pi-agent-core": "^0.70.2",
-    "@mariozechner/pi-coding-agent": "^0.70.2",
-    "@mariozechner/pi-tui": "^0.70.2",
     "@sinclair/typebox": "^0.34.49"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-agent-core": "*",
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*"
   },
   "devDependencies": {
     "prettier": "^3.6.2"
