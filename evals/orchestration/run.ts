@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { cases, repos, type EvalCase, type EvalRepo } from "./cases.ts";
 
-interface ToolCallRecord {
+export interface ToolCallRecord {
   id?: string;
   name: string;
   arguments: Record<string, unknown>;
@@ -32,7 +32,7 @@ interface GetSubagentResultRecord {
   completed: boolean;
 }
 
-interface EvalObservation {
+export interface EvalObservation {
   toolCalls: ToolCallRecord[];
   attemptedSubagentCalls: number;
   subagentCalls: number;
@@ -55,7 +55,7 @@ interface EvalObservation {
 
 type ScoreDimension = "delegation" | "routing" | "coordination" | "execution";
 
-interface ScoreCheck {
+export interface ScoreCheck {
   name: string;
   pass: boolean;
   detail: string;
@@ -69,7 +69,7 @@ interface DimensionScore {
   max: number;
 }
 
-interface EvalScore {
+export interface EvalScore {
   pass: boolean;
   allChecksPass: boolean;
   scoreEarned: number;
@@ -180,7 +180,9 @@ function resolvePromptTemplate(prompt: string): string {
   return prompt.replaceAll("{{DOTFILES_ROOT}}", DOTFILES_ROOT);
 }
 
-function countDelegatedPlanningCalls(toolCalls: ToolCallRecord[]): number {
+export function countDelegatedPlanningCalls(
+  toolCalls: ToolCallRecord[],
+): number {
   const planningPattern =
     /\b(plan|planning|implementation plan|investigation plan|recommend|recommendation|design direction|propose|proposal)\b/i;
   const evidenceOnlyPlanningPattern =
@@ -200,7 +202,7 @@ function countDelegatedPlanningCalls(toolCalls: ToolCallRecord[]): number {
   }).length;
 }
 
-function parseArgs(argv: string[]) {
+export function parseArgs(argv: string[]) {
   const selectedCaseIds = new Set<string>();
   let baseDir = process.env.PI_SUBAGENT_EVAL_BASE_DIR || DEFAULT_BASE_DIR;
   let resultsDir =
@@ -572,7 +574,7 @@ function getMissingHandoffCoverageKeywords(
   );
 }
 
-function parseObservation(
+export function parseObservation(
   stdout: string,
   stderr: string,
   exitCode: number,
@@ -965,7 +967,7 @@ function buildChecks(
   return checks;
 }
 
-function scoreCase(
+export function scoreCase(
   evalCase: EvalCase,
   observation: EvalObservation,
 ): EvalScore {
@@ -1403,4 +1405,9 @@ async function main() {
   }
 }
 
-await main();
+if (
+  process.argv[1] &&
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
+) {
+  await main();
+}

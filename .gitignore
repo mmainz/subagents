@@ -1,2 +1,5 @@
+# Dependencies
+/node_modules/
+
 # Generated eval artifacts
 /evals/orchestration/results/

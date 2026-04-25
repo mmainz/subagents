@@ -45,6 +45,11 @@ export interface SubagentRegistry {
   warnings: string[];
 }
 
+export interface DiscoverSubagentRegistryOptions {
+  defaultAgentsDir?: string;
+  userAgentsDir?: string;
+}
+
 const THINKING_LEVELS = new Set<ThinkingLevel>([
   "off",
   "minimal",
@@ -251,19 +256,23 @@ function applyAgentLayer(
   }
 }
 
-export function discoverSubagentRegistry(): SubagentRegistry {
+export function discoverSubagentRegistry(
+  options: DiscoverSubagentRegistryOptions = {},
+): SubagentRegistry {
   const warnings: string[] = [];
   const agents = new Map<string, SubagentConfig>();
   const disabledAgents = new Map<string, DisabledSubagentConfig>();
+  const defaultAgentsDir = options.defaultAgentsDir ?? DEFAULT_AGENTS_DIR;
+  const userAgentsDir = options.userAgentsDir ?? USER_AGENTS_DIR;
 
   applyAgentLayer(
     agents,
     disabledAgents,
-    DEFAULT_AGENTS_DIR,
+    defaultAgentsDir,
     "default",
     warnings,
   );
-  applyAgentLayer(agents, disabledAgents, USER_AGENTS_DIR, "user", warnings);
+  applyAgentLayer(agents, disabledAgents, userAgentsDir, "user", warnings);
 
   return {
     agents: [...agents.values()].sort((a, b) => a.name.localeCompare(b.name)),
