@@ -1,9 +1,8 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { truncateToWidth } from "@mariozechner/pi-tui";
+import { Loader, truncateToWidth } from "@mariozechner/pi-tui";
 import type { AgentManager } from "../runtime/agent-manager.js";
 import type { AgentActivity, AgentRecord } from "../runtime/types.js";
 
-const SPINNER = ["∴", "∵"];
 const MAX_LINES = 12;
 const FINISHED_TTL_MS = 5000;
 
@@ -48,7 +47,7 @@ function isTerminal(record: AgentRecord): boolean {
 export class AgentWidget {
   private ctx?: ExtensionContext;
   private timer?: NodeJS.Timeout;
-  private frame = 0;
+  private loader?: Loader;
   private finished = new Map<string, number>();
   private widgetRegistered = false;
   private tui?: { requestRender(): void };
@@ -65,12 +64,13 @@ export class AgentWidget {
       this.ctx = ctx;
       this.widgetRegistered = false;
       this.tui = undefined;
+      this.stopLoader();
     }
   }
 
   ensureTimer() {
     if (this.timer) return;
-    this.timer = setInterval(() => this.update(), 120);
+    this.timer = setInterval(() => this.update(), 1000);
     this.timer.unref?.();
   }
 
@@ -81,6 +81,7 @@ export class AgentWidget {
     this.ctx?.ui.setStatus("subagents", undefined);
     this.widgetRegistered = false;
     this.tui = undefined;
+    this.stopLoader();
   }
 
   markFinished(id: string) {
@@ -100,7 +101,6 @@ export class AgentWidget {
 
   update() {
     if (!this.ctx?.hasUI) return;
-    this.frame = (this.frame + 1) % SPINNER.length;
     this.pruneFinished();
     const records = this.manager.listAgents();
     const active = records.filter(
@@ -115,6 +115,7 @@ export class AgentWidget {
       this.ctx.ui.setStatus("subagents", undefined);
       this.widgetRegistered = false;
       this.tui = undefined;
+      this.stopLoader();
       if (this.timer) {
         clearInterval(this.timer);
         this.timer = undefined;
@@ -137,6 +138,13 @@ export class AgentWidget {
         "subagents",
         (tui, theme) => {
           this.tui = tui;
+          this.stopLoader();
+          this.loader = new Loader(
+            tui,
+            (spinner) => theme.fg("accent", spinner),
+            (text) => theme.fg("muted", text),
+            "",
+          );
           return {
             render: (width: number) => this.render(width, theme),
             invalidate: () => {},
@@ -148,6 +156,19 @@ export class AgentWidget {
     } else {
       this.tui?.requestRender();
     }
+  }
+
+  private stopLoader() {
+    this.loader?.stop();
+    this.loader = undefined;
+  }
+
+  private renderRunningIcon(theme: any): string {
+    const indicator = this.loader
+      ?.render(8)
+      .find((line) => line.trim())
+      ?.trim();
+    return indicator || theme.fg("accent", "⠋");
   }
 
   private render(width: number, theme: any): string[] {
@@ -180,7 +201,7 @@ export class AgentWidget {
       const childPrefix = theme.fg("borderMuted", isLast ? "  " : "│ ");
       const isRunning = record.status === "running";
       const icon = isRunning
-        ? theme.fg("accent", SPINNER[this.frame])
+        ? this.renderRunningIcon(theme)
         : record.status === "completed"
           ? theme.fg("success", "✓")
           : theme.fg("error", "✗");

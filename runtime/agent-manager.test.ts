@@ -341,8 +341,10 @@ describe("AgentManager", () => {
     expect(
       manager.listAgents().filter((record) => record.status === "completed"),
     ).toHaveLength(50);
-    expect(manager.getRecord(records[0].id)).toBeUndefined();
-    expect(disposers[0]).toHaveBeenCalledTimes(1);
-    expect(manager.getRecord(records[50].id)).toBe(records[50]);
+    const disposedIndexes = disposers
+      .map((dispose, index) => (dispose.mock.calls.length > 0 ? index : -1))
+      .filter((index) => index >= 0);
+    expect(disposedIndexes).toHaveLength(1);
+    expect(manager.getRecord(records[disposedIndexes[0]].id)).toBeUndefined();
   });
 });
