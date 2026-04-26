@@ -161,6 +161,7 @@ function normalizeAgent(
     return undefined;
   }
 
+  const model = parseString(raw.model);
   const thinking = parseThinking(raw.thinking);
   const rawPromptMode = raw.prompt_mode ?? raw.promptMode;
   const promptMode = parsePromptMode(rawPromptMode);
@@ -173,7 +174,7 @@ function normalizeAgent(
       `Agent '${name}' in ${filePath} has invalid thinking level '${String(raw.thinking)}'.`,
     );
   }
-  if (!parseString(raw.model)) {
+  if (!model) {
     warnings.push(`Agent '${name}' in ${filePath} has no model configured.`);
   }
   if (!thinking) {
@@ -181,7 +182,7 @@ function normalizeAgent(
       `Agent '${name}' in ${filePath} has no thinking level configured.`,
     );
   }
-  if (!parsed.body.trim()) {
+  if (!parsed.body) {
     warnings.push(`Agent '${name}' in ${filePath} has an empty prompt body.`);
   }
   if (rawPromptMode !== undefined && !promptMode) {
@@ -199,7 +200,7 @@ function normalizeAgent(
     name,
     description,
     useWhen: parseString(raw.use_when ?? raw.useWhen),
-    model: parseString(raw.model),
+    model,
     thinking,
     tools: parseStringList(raw.tools),
     extensions: parseBoolean(raw.extensions, false),
@@ -209,9 +210,9 @@ function normalizeAgent(
       true,
     ),
     inheritSkills: parseBoolean(raw.inherit_skills ?? raw.inheritSkills, false),
-    promptMode: promptMode || "append",
-    conversationContext: conversationContext || "isolated",
-    systemPrompt: parsed.body.trim(),
+    promptMode: promptMode ?? "append",
+    conversationContext: conversationContext ?? "isolated",
+    systemPrompt: parsed.body,
     filePath,
     scope,
   };
@@ -246,7 +247,7 @@ function applyAgentLayer(
     }
     seenInLayer.add(agent.name);
 
-    if ("enabled" in agent && agent.enabled) {
+    if ("enabled" in agent) {
       registry.set(agent.name, agent);
       disabled.delete(agent.name);
     } else {

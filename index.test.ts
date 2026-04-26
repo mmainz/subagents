@@ -175,17 +175,8 @@ describe("subagents extension", () => {
       execute: Function;
     };
 
-    await expect(
-      subagentTool.execute(
-        "call-1",
-        { agent: "missing", task: "Task" },
-        undefined,
-        undefined,
-        { cwd: "/repo" },
-      ),
-    ).resolves.toMatchObject({ isError: true });
     let result = await subagentTool.execute(
-      "call-2",
+      "call-1",
       { agent: "missing", task: "Task" },
       undefined,
       undefined,

@@ -47,13 +47,10 @@ async function main() {
 
   process.env.PI_CODING_AGENT_DIR = tempAgentDir;
 
-  const [{ discoverSubagentRegistry }, fsModule] = await Promise.all([
-    import("../../agents.ts"),
-    import("node:fs"),
-  ]);
+  const { discoverSubagentRegistry } = await import("../../agents.ts");
   const registry = discoverSubagentRegistry();
   const byName = new Map(registry.agents.map((agent) => [agent.name, agent]));
-  const runnerSource = fsModule.readFileSync(
+  const runnerSource = fs.readFileSync(
     path.resolve(import.meta.dirname, "../../runtime/agent-runner.ts"),
     "utf8",
   );

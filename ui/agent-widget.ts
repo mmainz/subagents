@@ -94,7 +94,7 @@ export class AgentWidget {
   }
 
   private pruneFinished(now = Date.now()) {
-    for (const [id, expiresAt] of [...this.finished.entries()]) {
+    for (const [id, expiresAt] of this.finished) {
       if (expiresAt <= now) this.finished.delete(id);
     }
   }
@@ -103,14 +103,17 @@ export class AgentWidget {
     if (!this.ctx?.hasUI) return;
     this.pruneFinished();
     const records = this.manager.listAgents();
-    const active = records.filter(
-      (record) => record.status === "running" || record.status === "queued",
-    );
+    const running = records.filter((record) => record.status === "running");
+    const queued = records.filter((record) => record.status === "queued");
     const visibleFinished = records.filter(
       (record) => isTerminal(record) && this.finished.has(record.id),
     );
 
-    if (active.length === 0 && visibleFinished.length === 0) {
+    if (
+      running.length === 0 &&
+      queued.length === 0 &&
+      visibleFinished.length === 0
+    ) {
       this.ctx.ui.setWidget("subagents", undefined);
       this.ctx.ui.setStatus("subagents", undefined);
       this.widgetRegistered = false;
@@ -123,15 +126,9 @@ export class AgentWidget {
       return;
     }
 
-    const running = records.filter(
-      (record) => record.status === "running",
-    ).length;
-    const queued = records.filter(
-      (record) => record.status === "queued",
-    ).length;
     this.ctx.ui.setStatus(
       "subagents",
-      `${running} running${queued ? `, ${queued} queued` : ""} subagents`,
+      `${running.length} running${queued.length ? `, ${queued.length} queued` : ""} subagents`,
     );
     if (!this.widgetRegistered) {
       this.ctx.ui.setWidget(

@@ -472,13 +472,8 @@ function extractAgentsFromToolArgs(args: Record<string, unknown>): string[] {
   if (typeof args.agent === "string") agents.push(args.agent);
   if (Array.isArray(args.tasks)) {
     for (const task of args.tasks) {
-      if (
-        task &&
-        typeof task === "object" &&
-        typeof (task as { agent?: unknown }).agent === "string"
-      ) {
-        agents.push((task as { agent: string }).agent);
-      }
+      const agent = getString(asRecord(task)?.agent);
+      if (agent) agents.push(agent);
     }
   }
   return agents;
@@ -1214,10 +1209,7 @@ function formatDimensionTotalsMarkdown(summary: RunSummary): string[] {
   for (const dimension of DIMENSION_ORDER) {
     const dimensionScore = summary.dimensions[dimension];
     if (dimensionScore.max <= 0) continue;
-    const percentage =
-      dimensionScore.max > 0
-        ? (dimensionScore.earned / dimensionScore.max) * 100
-        : 0;
+    const percentage = (dimensionScore.earned / dimensionScore.max) * 100;
     lines.push(
       `| ${dimension} | ${formatScoreNumber(dimensionScore.earned)} | ${formatScoreNumber(dimensionScore.max)} | ${formatScoreNumber(percentage)}% |`,
     );

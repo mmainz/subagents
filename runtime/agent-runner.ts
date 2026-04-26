@@ -38,15 +38,9 @@ class SubagentRunError extends Error {
   }
 }
 
-function extractAssistantText(message: AgentMessage | undefined): string {
-  if (
-    !message ||
-    message.role !== "assistant" ||
-    !Array.isArray(message.content)
-  )
-    return "";
-
-  return message.content
+function extractTextBlocks(content: unknown): string {
+  if (!Array.isArray(content)) return "";
+  return content
     .filter((block): block is { type: "text"; text: string } => {
       return (
         Boolean(block) &&
@@ -58,6 +52,11 @@ function extractAssistantText(message: AgentMessage | undefined): string {
     .map((block) => block.text)
     .join("\n")
     .trim();
+}
+
+function extractAssistantText(message: AgentMessage | undefined): string {
+  if (!message || message.role !== "assistant") return "";
+  return extractTextBlocks(message.content);
 }
 
 function getAssistantFailure(
@@ -75,20 +74,7 @@ function getAssistantFailure(
 
 function extractMessageText(message: AgentMessage): string {
   const content = (message as { content?: unknown }).content;
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .filter((block): block is { type: "text"; text: string } => {
-      return (
-        Boolean(block) &&
-        typeof block === "object" &&
-        block.type === "text" &&
-        typeof (block as { text?: unknown }).text === "string"
-      );
-    })
-    .map((block) => block.text)
-    .join("\n")
-    .trim();
+  return typeof content === "string" ? content : extractTextBlocks(content);
 }
 
 function resolveConfiguredModel(ctx: ExtensionContext, agent: SubagentConfig) {

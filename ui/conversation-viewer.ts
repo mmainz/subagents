@@ -36,7 +36,7 @@ export async function showConversationViewer(
           );
       };
 
-      const component = {
+      return {
         render(width: number) {
           const safeWidth = Math.max(24, width);
           const border = theme.fg("accent", "─".repeat(safeWidth));
@@ -114,7 +114,6 @@ export async function showConversationViewer(
           unsubscribe?.();
         },
       };
-      return component;
     },
     { overlay: true },
   );

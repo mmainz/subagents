@@ -125,12 +125,7 @@ export class AgentManager {
     if (!record) return false;
     record.abortController.abort();
     this.queue = this.queue.filter((queued) => queued.record.id !== id);
-    record.status = "aborted";
-    record.stopReason = "aborted";
-    record.error ||= "Subagent was aborted.";
-    record.completedAt = Date.now();
-    record.completedSequence = ++this.nextCompletedSequence;
-    record.completionResolve?.(record.result || "");
+    this.markAborted(record);
     this.options.activity.delete(id);
     this.options.onUpdate?.();
     return true;
@@ -140,12 +135,7 @@ export class AgentManager {
     for (const record of this.records.values()) {
       if (record.status === "running" || record.status === "queued") {
         record.abortController.abort();
-        record.status = "aborted";
-        record.stopReason = "aborted";
-        record.error ||= "Subagent was aborted.";
-        record.completedAt = Date.now();
-        record.completedSequence = ++this.nextCompletedSequence;
-        record.completionResolve?.(record.result || "");
+        this.markAborted(record);
       }
     }
     this.queue = [];
@@ -174,6 +164,15 @@ export class AgentManager {
     };
     if (signal.aborted) abortIfQueued();
     else signal.addEventListener("abort", abortIfQueued, { once: true });
+  }
+
+  private markAborted(record: AgentRecord) {
+    record.status = "aborted";
+    record.stopReason = "aborted";
+    record.error ||= "Subagent was aborted.";
+    record.completedAt = Date.now();
+    record.completedSequence = ++this.nextCompletedSequence;
+    record.completionResolve?.(record.result || "");
   }
 
   private createRecord(input: SpawnInput): AgentRecord {
@@ -313,12 +312,7 @@ export class AgentManager {
     ) {
       const queued = this.queue.shift()!;
       if (queued.record.abortController.signal.aborted) {
-        queued.record.status = "aborted";
-        queued.record.stopReason = "aborted";
-        queued.record.error ||= "Subagent was aborted.";
-        queued.record.completedAt = Date.now();
-        queued.record.completedSequence = ++this.nextCompletedSequence;
-        queued.record.completionResolve?.(queued.record.result || "");
+        this.markAborted(queued.record);
         continue;
       }
       this.start(queued.record, queued.input);

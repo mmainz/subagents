@@ -130,10 +130,6 @@ function shortenInspectorPath(rawPath: unknown): string {
   return rawPath;
 }
 
-function formatBoolean(value: boolean): string {
-  return value ? "true" : "false";
-}
-
 function formatAgentRuntime(agent: SubagentConfig): string[] {
   return [
     `model: ${agent.model || "not configured"}`,
@@ -141,9 +137,9 @@ function formatAgentRuntime(agent: SubagentConfig): string[] {
     `tools: ${agent.tools.join(", ") || "none"}`,
     `prompt_mode: ${agent.promptMode}`,
     `conversation_context: ${agent.conversationContext}`,
-    `extensions: ${formatBoolean(agent.extensions)}`,
-    `inherit_context: ${formatBoolean(agent.inheritContext)}`,
-    `inherit_skills: ${formatBoolean(agent.inheritSkills)}`,
+    `extensions: ${String(agent.extensions)}`,
+    `inherit_context: ${String(agent.inheritContext)}`,
+    `inherit_skills: ${String(agent.inheritSkills)}`,
     `source: ${agent.scope}`,
     `path: ${shortenInspectorPath(agent.filePath)}`,
   ];
