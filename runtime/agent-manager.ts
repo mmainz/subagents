@@ -72,6 +72,7 @@ export class AgentManager {
   private runningBackground = 0;
   private maxConcurrent: number;
   private maxCompletedRecords = 50;
+  private nextCompletedSequence = 0;
   private options: AgentManagerOptions;
 
   constructor(options: AgentManagerOptions) {
@@ -128,6 +129,7 @@ export class AgentManager {
     record.stopReason = "aborted";
     record.error ||= "Subagent was aborted.";
     record.completedAt = Date.now();
+    record.completedSequence = ++this.nextCompletedSequence;
     record.completionResolve?.(record.result || "");
     this.options.activity.delete(id);
     this.options.onUpdate?.();
@@ -142,6 +144,7 @@ export class AgentManager {
         record.stopReason = "aborted";
         record.error ||= "Subagent was aborted.";
         record.completedAt = Date.now();
+        record.completedSequence = ++this.nextCompletedSequence;
         record.completionResolve?.(record.result || "");
       }
     }
@@ -275,6 +278,7 @@ export class AgentManager {
       })
       .finally(() => {
         record.completedAt = Date.now();
+        record.completedSequence = ++this.nextCompletedSequence;
         if (record.runInBackground)
           this.runningBackground = Math.max(0, this.runningBackground - 1);
         this.options.activity.delete(record.id);
@@ -290,7 +294,11 @@ export class AgentManager {
       .filter(
         (record) => record.status !== "running" && record.status !== "queued",
       )
-      .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+      .sort(
+        (a, b) =>
+          (b.completedAt || 0) - (a.completedAt || 0) ||
+          (b.completedSequence || 0) - (a.completedSequence || 0),
+      );
     for (const record of completed.slice(this.maxCompletedRecords)) {
       record.session?.dispose?.();
       this.records.delete(record.id);
@@ -309,6 +317,7 @@ export class AgentManager {
         queued.record.stopReason = "aborted";
         queued.record.error ||= "Subagent was aborted.";
         queued.record.completedAt = Date.now();
+        queued.record.completedSequence = ++this.nextCompletedSequence;
         queued.record.completionResolve?.(queued.record.result || "");
         continue;
       }

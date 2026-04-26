@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getAgentDir } from "@mariozechner/pi-coding-agent";
 import { cases, repos, type EvalCase, type EvalRepo } from "./cases.ts";
 
 export interface ToolCallRecord {
@@ -138,8 +139,13 @@ interface SummaryArtifactPaths {
 const DEFAULT_BASE_DIR = path.join("/tmp", "pi-subagent-evals");
 const EVAL_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_RESULTS_DIR = path.join(EVAL_DIR, "results");
-const AGENT_DIR = path.resolve(EVAL_DIR, "../../../..");
-const DOTFILES_ROOT = path.resolve(AGENT_DIR, "../..");
+const REPO_ROOT = path.resolve(EVAL_DIR, "../..");
+const EXTENSION_PATH = path.join(REPO_ROOT, "index.ts");
+const SOURCE_AGENT_DIR = getAgentDir();
+const AGENT_DIR =
+  process.env.PI_SUBAGENT_EVAL_AGENT_DIR ||
+  path.join(os.tmpdir(), "pi-subagent-evals-agent");
+const DOTFILES_ROOT = process.env.DOTFILES_ROOT || os.homedir();
 
 const CHECK_WEIGHTS = {
   delegateDecision: 30,
@@ -178,6 +184,40 @@ function parseJobs(value: string | undefined, fallback: number): number {
 
 function resolvePromptTemplate(prompt: string): string {
   return prompt.replaceAll("{{DOTFILES_ROOT}}", DOTFILES_ROOT);
+}
+
+function copyIfExists(source: string, destination: string) {
+  if (fs.existsSync(source)) fs.copyFileSync(source, destination);
+}
+
+function prepareEvalAgentDir() {
+  fs.mkdirSync(AGENT_DIR, { recursive: true });
+  copyIfExists(
+    path.join(SOURCE_AGENT_DIR, "auth.json"),
+    path.join(AGENT_DIR, "auth.json"),
+  );
+  copyIfExists(
+    path.join(SOURCE_AGENT_DIR, "models.json"),
+    path.join(AGENT_DIR, "models.json"),
+  );
+
+  const sourceSettingsPath = path.join(SOURCE_AGENT_DIR, "settings.json");
+  if (!fs.existsSync(sourceSettingsPath)) return;
+
+  try {
+    const settings = JSON.parse(fs.readFileSync(sourceSettingsPath, "utf8"));
+    if (settings && typeof settings === "object" && !Array.isArray(settings)) {
+      delete settings.packages;
+      delete settings.extensions;
+      fs.writeFileSync(
+        path.join(AGENT_DIR, "settings.json"),
+        `${JSON.stringify(settings, null, 2)}\n`,
+        "utf8",
+      );
+    }
+  } catch {
+    // Eval runs can proceed with default settings if local settings are invalid.
+  }
 }
 
 export function countDelegatedPlanningCalls(
@@ -1019,6 +1059,8 @@ async function runEvalCase(
       "json",
       "-p",
       "--no-session",
+      "--extension",
+      EXTENSION_PATH,
       resolvePromptTemplate(evalCase.prompt),
     ],
     {
@@ -1352,6 +1394,12 @@ async function main() {
     );
     process.exit(1);
   }
+
+  if (!fs.existsSync(EXTENSION_PATH)) {
+    throw new Error(`Subagents extension not found at ${EXTENSION_PATH}`);
+  }
+
+  prepareEvalAgentDir();
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const runResultsDir = path.join(resultsDir, timestamp);

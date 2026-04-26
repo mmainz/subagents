@@ -84,7 +84,12 @@ function makeSession() {
 beforeEach(() => {
   vi.clearAllMocks();
   piMocks.getAgentDir.mockReturnValue("/agent-dir");
-  piMocks.sessionManagerInMemory.mockReturnValue({ inMemory: true });
+  piMocks.sessionManagerInMemory.mockImplementation(() => ({
+    messages: [] as unknown[],
+    appendMessage: vi.fn(function (this: { messages: unknown[] }, message) {
+      this.messages.push(message);
+    }),
+  }));
   piMocks.createAgentSessionServices.mockResolvedValue({ services: true });
   piMocks.createAgentSessionFromServices.mockResolvedValue({
     session: makeSession(),
@@ -174,8 +179,9 @@ describe("runAgentInProcess", () => {
   it("forks parent conversation context only for fork agents", async () => {
     const forkSession = makeSession();
     const forkContext = makeContext();
-    piMocks.createAgentSessionFromServices.mockResolvedValueOnce({
-      session: forkSession,
+    piMocks.createAgentSessionFromServices.mockImplementationOnce((options) => {
+      forkSession.messages = [...options.sessionManager.messages];
+      return Promise.resolve({ session: forkSession });
     });
     await runAgentInProcess(
       forkContext as never,
@@ -189,6 +195,10 @@ describe("runAgentInProcess", () => {
       role: "user",
       content: "Parent context",
     });
+    expect(
+      piMocks.createAgentSessionFromServices.mock.calls.at(-1)?.[0]
+        .sessionManager.appendMessage,
+    ).toHaveBeenCalledWith({ role: "user", content: "Parent context" });
 
     const isolatedSession = makeSession();
     const isolatedContext = makeContext();

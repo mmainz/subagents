@@ -341,6 +341,11 @@ function summarizeRecord(record: AgentRecord) {
   };
 }
 
+function parseMaxConcurrent(value: string | undefined, fallback = 4): number {
+  const parsed = Number.parseInt(value || "", 10);
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : fallback;
+}
+
 function formatBackgroundStart(record: AgentRecord): string {
   return [
     `Started ${record.agent.name} subagent in background.`,
@@ -499,8 +504,7 @@ export default function subagentsMinimal(pi: ExtensionAPI) {
   let widget: AgentWidget;
   const manager = new AgentManager({
     activity: agentActivity,
-    maxConcurrent:
-      Number.parseInt(process.env.PI_SUBAGENT_MAX_CONCURRENT || "4", 10) || 4,
+    maxConcurrent: parseMaxConcurrent(process.env.PI_SUBAGENT_MAX_CONCURRENT),
     onUpdate: () => widget?.update(),
     onComplete: (record) => {
       widget?.markFinished(record.id);
@@ -923,7 +927,7 @@ export default function subagentsMinimal(pi: ExtensionAPI) {
       "Use the subagent tool for focused helper work. Choose from the enabled agents below.",
       "- Delegate matching work when it is broad/noisy, parallelizable, specialized (for example media/visual inspection or external research), or the user asks for an independent review/second opinion.",
       "- Use main-thread tools for tiny, linear local checks and implementation when no specialized agent is needed; do not inspect local images/screenshots/diagrams/video directly when a visual/media agent is enabled.",
-      "- Use foreground subagent runs by default. Use background runs only for independent long-running or parallel work; after starting one, call get_subagent_result before doing overlapping grep/find/read/webfetch/websearch work.",
+      "- Use foreground subagent runs by default. Use background runs only for independent long-running or parallel work; after starting one, call get_subagent_result before doing overlapping main-thread evidence gathering or retrieval work.",
       "- For mapping/survey work across independent areas, split the work into focused subagents; use background runs when those threads are independent.",
       "- Keep final synthesis, planning, recommendations, and implementation strategy in the main thread unless the user explicitly asks a subagent to own those outputs.",
       "- Write delegation briefs with the user's decision-critical concerns, named concepts, relevant keywords, and later objective so handoffs contain enough evidence for final synthesis.",

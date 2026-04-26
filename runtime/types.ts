@@ -22,6 +22,7 @@ export interface AgentRecord {
   stopReason?: string;
   startedAt?: number;
   completedAt?: number;
+  completedSequence?: number;
   model?: string;
   thinking?: string;
   session?: AgentSession;

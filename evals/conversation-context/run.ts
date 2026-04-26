@@ -96,9 +96,10 @@ async function main() {
         runnerSource.includes(
           "ctx.sessionManager.buildSessionContext().messages",
         ) &&
-        runnerSource.includes("session.messages = structuredClone"),
+        runnerSource.includes("sessionManager.appendMessage(message)") &&
+        !runnerSource.includes("session.messages = structuredClone"),
       detail:
-        "agent-runner.ts should copy the parent session context only for fork agents",
+        "agent-runner.ts should seed the child session manager only for fork agents",
     },
   ];
 

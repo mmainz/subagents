@@ -311,40 +311,43 @@ describe("AgentManager", () => {
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 
-  it("prunes old completed records and disposes pruned sessions", async () => {
+  it("prunes the oldest completed records when completion timestamps tie", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
     const manager = makeManager();
     const disposers = Array.from({ length: 51 }, () => vi.fn());
     const records = [];
 
-    for (let i = 0; i < 51; i++) {
-      const record = manager.spawn({
-        ctx: {} as never,
-        agent: makeAgent({ name: `agent-${i}` }),
-        task: `task ${i}`,
-        cwd: "/tmp",
-        runInBackground: true,
-      });
-      records.push(record);
-      pendingRuns[i].callbacks.onSessionCreated?.({
-        dispose: disposers[i],
-      } as never);
-      pendingRuns[i].resolve({
-        result: `result ${i}`,
-        session: { dispose: disposers[i] },
-        model: "provider/model",
-        thinking: "low",
-      });
-      await record.promise;
-      await new Promise((resolve) => setTimeout(resolve, 0));
+    try {
+      for (let i = 0; i < 51; i++) {
+        const record = manager.spawn({
+          ctx: {} as never,
+          agent: makeAgent({ name: `agent-${i}` }),
+          task: `task ${i}`,
+          cwd: "/tmp",
+          runInBackground: true,
+        });
+        records.push(record);
+        pendingRuns[i].callbacks.onSessionCreated?.({
+          dispose: disposers[i],
+        } as never);
+        pendingRuns[i].resolve({
+          result: `result ${i}`,
+          session: { dispose: disposers[i] },
+          model: "provider/model",
+          thinking: "low",
+        });
+        await record.promise;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    } finally {
+      now.mockRestore();
     }
 
     expect(
       manager.listAgents().filter((record) => record.status === "completed"),
     ).toHaveLength(50);
-    const disposedIndexes = disposers
-      .map((dispose, index) => (dispose.mock.calls.length > 0 ? index : -1))
-      .filter((index) => index >= 0);
-    expect(disposedIndexes).toHaveLength(1);
-    expect(manager.getRecord(records[disposedIndexes[0]].id)).toBeUndefined();
+    expect(manager.getRecord(records[0].id)).toBeUndefined();
+    expect(disposers[0]).toHaveBeenCalledTimes(1);
+    expect(manager.getRecord(records[50].id)).toBe(records[50]);
   });
 });

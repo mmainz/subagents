@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     }>,
     warnings: [] as string[],
   },
+  managerOptions: [] as Array<{ maxConcurrent?: number }>,
   managers: [] as Array<{
     spawn: ReturnType<typeof vi.fn>;
     spawnAndWait: ReturnType<typeof vi.fn>;
@@ -33,7 +34,8 @@ vi.mock("./agents.js", () => ({
 }));
 
 vi.mock("./runtime/agent-manager.js", () => ({
-  AgentManager: vi.fn().mockImplementation(() => {
+  AgentManager: vi.fn().mockImplementation((options) => {
+    mocks.managerOptions.push(options);
     const manager = {
       spawn: vi.fn(),
       spawnAndWait: vi.fn(),
@@ -146,12 +148,15 @@ beforeEach(() => {
     ],
     warnings: [],
   };
+  mocks.managerOptions.splice(0);
   mocks.managers.splice(0);
+  delete process.env.PI_SUBAGENT_MAX_CONCURRENT;
 });
 
 describe("subagents extension", () => {
-  it("registers tools, command, and lifecycle handlers", () => {
+  it("registers tools, command, lifecycle handlers, and clamps concurrency config", () => {
     const { pi, commands, tools, events } = makePi();
+    process.env.PI_SUBAGENT_MAX_CONCURRENT = "-1";
 
     subagentsMinimal(pi as never);
 
@@ -160,6 +165,7 @@ describe("subagents extension", () => {
     expect(tools.has("get_subagent_result")).toBe(true);
     expect(events.has("before_agent_start")).toBe(true);
     expect(events.has("session_shutdown")).toBe(true);
+    expect(mocks.managerOptions.at(-1)?.maxConcurrent).toBe(4);
   });
 
   it("returns useful errors for unknown and disabled subagents", async () => {

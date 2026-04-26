@@ -14,7 +14,7 @@ conversation_context: isolated
 
 When discovery is needed, start with 2-4 varied searches rather than repeating one narrow query. If authoritative URLs are provided, fetch those first.
 
-Use websearch for discovery and webfetch for retrieval.
+Use an available web-search capability for discovery and an available web-fetch or page-retrieval capability for reading authoritative sources.
 
 Prefer official docs, standards bodies, maintainers, and other authoritative, recent technical sources.
 

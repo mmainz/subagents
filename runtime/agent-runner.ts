@@ -174,19 +174,23 @@ export async function runAgentInProcess(
   const toolNames = agent.tools.filter(
     (tool) => !RECURSIVE_TOOL_NAMES.has(tool),
   );
+  const sessionManager = SessionManager.inMemory(input.cwd);
+
+  if (agent.conversationContext === "fork") {
+    for (const message of structuredClone(
+      ctx.sessionManager.buildSessionContext().messages,
+    )) {
+      sessionManager.appendMessage(message);
+    }
+  }
+
   const { session } = await createAgentSessionFromServices({
     services,
-    sessionManager: SessionManager.inMemory(input.cwd),
+    sessionManager,
     model,
     thinkingLevel: agent.thinking,
     tools: toolNames,
   });
-
-  if (agent.conversationContext === "fork") {
-    session.messages = structuredClone(
-      ctx.sessionManager.buildSessionContext().messages,
-    );
-  }
 
   callbacks.onSessionCreated?.(session);
 
