@@ -19,12 +19,26 @@ import {
 import type { AgentRecord } from "../runtime/types.js";
 
 type ContentBlock = Record<string, unknown>;
+type ConversationMessage = {
+  role?: string;
+  content?: unknown;
+  toolCallId?: string;
+  stopReason?: string;
+  errorMessage?: string;
+};
+type ToolCall = { id: string; name: string; arguments: unknown };
 
 function isContentBlock(block: unknown): block is ContentBlock {
   return block !== null && typeof block === "object";
 }
 
-function getUserMessageText(message: { content?: unknown }): string {
+function asConversationMessage(
+  message: unknown,
+): ConversationMessage | undefined {
+  return isContentBlock(message) ? (message as ConversationMessage) : undefined;
+}
+
+function getUserMessageText(message: ConversationMessage): string {
   const content = message.content;
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
@@ -40,17 +54,101 @@ function getUserMessageText(message: { content?: unknown }): string {
     .join("");
 }
 
-function getToolCalls(message: {
-  content?: unknown;
-}): Array<{ id: string; name: string; arguments: unknown }> {
+function getToolCalls(message: ConversationMessage): ToolCall[] {
   if (!Array.isArray(message.content)) return [];
   return message.content.filter(
-    (block): block is { id: string; name: string; arguments: unknown } =>
+    (block): block is ToolCall =>
       isContentBlock(block) &&
       block.type === "toolCall" &&
       typeof block.id === "string" &&
       typeof block.name === "string",
   );
+}
+
+function addUserMessage(
+  container: Container,
+  message: ConversationMessage,
+  markdownTheme: ReturnType<typeof getMarkdownTheme>,
+) {
+  const textContent = getUserMessageText(message);
+  if (!textContent) return;
+  if (container.children.length > 0) container.addChild(new Spacer(1));
+
+  const skillBlock = parseSkillBlock(textContent);
+  if (!skillBlock) {
+    container.addChild(new UserMessageComponent(textContent, markdownTheme));
+    return;
+  }
+
+  container.addChild(
+    new SkillInvocationMessageComponent(skillBlock, markdownTheme),
+  );
+  if (skillBlock.userMessage) {
+    container.addChild(
+      new UserMessageComponent(skillBlock.userMessage, markdownTheme),
+    );
+  }
+}
+
+function addToolFailureResult(
+  component: ToolExecutionComponent,
+  message: ConversationMessage,
+) {
+  if (message.stopReason !== "aborted" && message.stopReason !== "error") {
+    return;
+  }
+
+  const defaultMessage =
+    message.stopReason === "aborted" ? "Operation aborted" : "Error";
+  component.updateResult({
+    content: [{ type: "text", text: message.errorMessage || defaultMessage }],
+    isError: true,
+  });
+}
+
+function addAssistantMessage(
+  container: Container,
+  pendingTools: Map<string, ToolExecutionComponent>,
+  rawMessage: unknown,
+  message: ConversationMessage,
+  markdownTheme: ReturnType<typeof getMarkdownTheme>,
+  tui: TUI,
+  cwd: string,
+) {
+  container.addChild(
+    new AssistantMessageComponent(rawMessage as any, false, markdownTheme),
+  );
+
+  for (const toolCall of getToolCalls(message)) {
+    const component = new ToolExecutionComponent(
+      toolCall.name,
+      toolCall.id,
+      toolCall.arguments,
+      undefined,
+      undefined,
+      tui,
+      cwd,
+    );
+    container.addChild(component);
+    pendingTools.set(toolCall.id, component);
+    addToolFailureResult(component, message);
+    if (message.stopReason === "aborted" || message.stopReason === "error") {
+      pendingTools.delete(toolCall.id);
+    }
+  }
+}
+
+function addToolResult(
+  pendingTools: Map<string, ToolExecutionComponent>,
+  rawMessage: unknown,
+  message: ConversationMessage,
+) {
+  if (!message.toolCallId) return;
+  const component = pendingTools.get(message.toolCallId);
+  if (!component) return;
+
+  component.updateResult(rawMessage as any);
+  pendingTools.delete(message.toolCallId);
 }
 
 function buildConversationComponent(
@@ -63,83 +161,23 @@ function buildConversationComponent(
   const markdownTheme = getMarkdownTheme();
 
   for (const rawMessage of session.messages ?? []) {
-    if (!rawMessage || typeof rawMessage !== "object") continue;
-    const message = rawMessage as {
-      role?: string;
-      content?: unknown;
-      toolCallId?: string;
-      stopReason?: string;
-      errorMessage?: string;
-    };
+    const message = asConversationMessage(rawMessage);
+    if (!message) continue;
 
     if (message.role === "user") {
-      const textContent = getUserMessageText(message);
-      if (!textContent) continue;
-      if (container.children.length > 0) container.addChild(new Spacer(1));
-
-      const skillBlock = parseSkillBlock(textContent);
-      if (skillBlock) {
-        container.addChild(
-          new SkillInvocationMessageComponent(skillBlock, markdownTheme),
-        );
-        if (skillBlock.userMessage) {
-          container.addChild(
-            new UserMessageComponent(skillBlock.userMessage, markdownTheme),
-          );
-        }
-      } else {
-        container.addChild(
-          new UserMessageComponent(textContent, markdownTheme),
-        );
-      }
-      continue;
-    }
-
-    if (message.role === "assistant") {
-      container.addChild(
-        new AssistantMessageComponent(rawMessage as any, false, markdownTheme),
+      addUserMessage(container, message, markdownTheme);
+    } else if (message.role === "assistant") {
+      addAssistantMessage(
+        container,
+        pendingTools,
+        rawMessage,
+        message,
+        markdownTheme,
+        tui,
+        cwd,
       );
-
-      for (const toolCall of getToolCalls(message)) {
-        const component = new ToolExecutionComponent(
-          toolCall.name,
-          toolCall.id,
-          toolCall.arguments,
-          undefined,
-          undefined,
-          tui,
-          cwd,
-        );
-        container.addChild(component);
-        pendingTools.set(toolCall.id, component);
-
-        if (
-          message.stopReason === "aborted" ||
-          message.stopReason === "error"
-        ) {
-          const defaultMessage =
-            message.stopReason === "aborted" ? "Operation aborted" : "Error";
-          component.updateResult({
-            content: [
-              {
-                type: "text",
-                text: message.errorMessage || defaultMessage,
-              },
-            ],
-            isError: true,
-          });
-          pendingTools.delete(toolCall.id);
-        }
-      }
-      continue;
-    }
-
-    if (message.role === "toolResult" && message.toolCallId) {
-      const component = pendingTools.get(message.toolCallId);
-      if (component) {
-        component.updateResult(rawMessage as any);
-        pendingTools.delete(message.toolCallId);
-      }
+    } else if (message.role === "toolResult") {
+      addToolResult(pendingTools, rawMessage, message);
     }
   }
 

@@ -68,6 +68,15 @@ interface RawMarkdownAgent {
   body: string;
 }
 
+interface NormalizedMetadata {
+  model?: string;
+  thinking?: ThinkingLevel;
+  rawPromptMode: unknown;
+  promptMode?: PromptMode;
+  rawConversationContext: unknown;
+  conversationContext?: ConversationContextMode;
+}
+
 function parseMarkdownAgent(filePath: string): RawMarkdownAgent {
   const content = fs.readFileSync(filePath, "utf8");
   const { frontmatter, body } =
@@ -126,20 +135,127 @@ function parseConversationContext(
   return undefined;
 }
 
-function normalizeAgent(
+function readMarkdownAgent(
   filePath: string,
-  scope: AgentScope,
   warnings: string[],
-): SubagentConfig | DisabledSubagentConfig | undefined {
-  let parsed: RawMarkdownAgent;
+): RawMarkdownAgent | undefined {
   try {
-    parsed = parseMarkdownAgent(filePath);
+    return parseMarkdownAgent(filePath);
   } catch (error) {
     warnings.push(
       `Could not read ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
     );
     return undefined;
   }
+}
+
+function parseMetadata(raw: Record<string, unknown>): NormalizedMetadata {
+  const rawPromptMode = raw.prompt_mode ?? raw.promptMode;
+  const rawConversationContext =
+    raw.conversation_context ?? raw.conversationContext;
+  return {
+    model: parseString(raw.model),
+    thinking: parseThinking(raw.thinking),
+    rawPromptMode,
+    promptMode: parsePromptMode(rawPromptMode),
+    rawConversationContext,
+    conversationContext: parseConversationContext(rawConversationContext),
+  };
+}
+
+function collectRequiredMetadataWarnings(
+  agentLabel: string,
+  metadata: NormalizedMetadata,
+  body: string,
+): string[] {
+  const warnings: string[] = [];
+  if (!metadata.model) warnings.push(`${agentLabel} has no model configured.`);
+  if (!metadata.thinking) {
+    warnings.push(`${agentLabel} has no thinking level configured.`);
+  }
+  if (!body) warnings.push(`${agentLabel} has an empty prompt body.`);
+  return warnings;
+}
+
+function collectInvalidMetadataWarnings(
+  agentLabel: string,
+  raw: Record<string, unknown>,
+  metadata: NormalizedMetadata,
+): string[] {
+  const warnings: string[] = [];
+  if (raw.thinking !== undefined && !metadata.thinking) {
+    warnings.push(
+      `${agentLabel} has invalid thinking level '${String(raw.thinking)}'.`,
+    );
+  }
+  if (metadata.rawPromptMode !== undefined && !metadata.promptMode) {
+    warnings.push(
+      `${agentLabel} has invalid prompt_mode '${String(metadata.rawPromptMode)}'. Expected 'append' or 'replace'.`,
+    );
+  }
+  if (
+    metadata.rawConversationContext !== undefined &&
+    !metadata.conversationContext
+  ) {
+    warnings.push(
+      `${agentLabel} has invalid conversation_context '${String(metadata.rawConversationContext)}'. Expected 'isolated' or 'fork'.`,
+    );
+  }
+  return warnings;
+}
+
+function collectAgentMetadataWarnings(
+  name: string,
+  filePath: string,
+  raw: Record<string, unknown>,
+  metadata: NormalizedMetadata,
+  body: string,
+): string[] {
+  const agentLabel = `Agent '${name}' in ${filePath}`;
+  return [
+    ...collectInvalidMetadataWarnings(agentLabel, raw, metadata),
+    ...collectRequiredMetadataWarnings(agentLabel, metadata, body),
+  ];
+}
+
+function buildAgentConfig(
+  name: string,
+  description: string,
+  raw: Record<string, unknown>,
+  metadata: NormalizedMetadata,
+  parsed: RawMarkdownAgent,
+  filePath: string,
+  scope: AgentScope,
+): SubagentConfig {
+  return {
+    name,
+    description,
+    useWhen: parseString(raw.use_when ?? raw.useWhen),
+    model: metadata.model,
+    thinking: metadata.thinking,
+    tools: parseStringList(raw.tools),
+    extensions: parseBoolean(raw.extensions, false),
+    enabled: true,
+    inheritContext: parseBoolean(
+      raw.inherit_context ?? raw.inheritContext,
+      true,
+    ),
+    inheritSkills: parseBoolean(raw.inherit_skills ?? raw.inheritSkills, false),
+    promptMode: metadata.promptMode ?? "append",
+    conversationContext: metadata.conversationContext ?? "isolated",
+    systemPrompt: parsed.body,
+    filePath,
+    scope,
+  };
+}
+
+function normalizeAgent(
+  filePath: string,
+  scope: AgentScope,
+  warnings: string[],
+): SubagentConfig | DisabledSubagentConfig | undefined {
+  const parsed = readMarkdownAgent(filePath, warnings);
+  if (!parsed) return undefined;
 
   const raw = parsed.frontmatter;
   const name = parseString(raw.name);
@@ -150,8 +266,7 @@ function normalizeAgent(
     return undefined;
   }
 
-  const enabled = parseBoolean(raw.enabled, true);
-  if (!enabled) return { name, filePath, scope };
+  if (!parseBoolean(raw.enabled, true)) return { name, filePath, scope };
 
   const description = parseString(raw.description);
   if (!description) {
@@ -161,61 +276,19 @@ function normalizeAgent(
     return undefined;
   }
 
-  const model = parseString(raw.model);
-  const thinking = parseThinking(raw.thinking);
-  const rawPromptMode = raw.prompt_mode ?? raw.promptMode;
-  const promptMode = parsePromptMode(rawPromptMode);
-  const rawConversationContext =
-    raw.conversation_context ?? raw.conversationContext;
-  const conversationContext = parseConversationContext(rawConversationContext);
-
-  if (raw.thinking !== undefined && !thinking) {
-    warnings.push(
-      `Agent '${name}' in ${filePath} has invalid thinking level '${String(raw.thinking)}'.`,
-    );
-  }
-  if (!model) {
-    warnings.push(`Agent '${name}' in ${filePath} has no model configured.`);
-  }
-  if (!thinking) {
-    warnings.push(
-      `Agent '${name}' in ${filePath} has no thinking level configured.`,
-    );
-  }
-  if (!parsed.body) {
-    warnings.push(`Agent '${name}' in ${filePath} has an empty prompt body.`);
-  }
-  if (rawPromptMode !== undefined && !promptMode) {
-    warnings.push(
-      `Agent '${name}' in ${filePath} has invalid prompt_mode '${String(rawPromptMode)}'. Expected 'append' or 'replace'.`,
-    );
-  }
-  if (rawConversationContext !== undefined && !conversationContext) {
-    warnings.push(
-      `Agent '${name}' in ${filePath} has invalid conversation_context '${String(rawConversationContext)}'. Expected 'isolated' or 'fork'.`,
-    );
-  }
-
-  return {
+  const metadata = parseMetadata(raw);
+  warnings.push(
+    ...collectAgentMetadataWarnings(name, filePath, raw, metadata, parsed.body),
+  );
+  return buildAgentConfig(
     name,
     description,
-    useWhen: parseString(raw.use_when ?? raw.useWhen),
-    model,
-    thinking,
-    tools: parseStringList(raw.tools),
-    extensions: parseBoolean(raw.extensions, false),
-    enabled,
-    inheritContext: parseBoolean(
-      raw.inherit_context ?? raw.inheritContext,
-      true,
-    ),
-    inheritSkills: parseBoolean(raw.inherit_skills ?? raw.inheritSkills, false),
-    promptMode: promptMode ?? "append",
-    conversationContext: conversationContext ?? "isolated",
-    systemPrompt: parsed.body,
+    raw,
+    metadata,
+    parsed,
     filePath,
     scope,
-  };
+  );
 }
 
 function listMarkdownFiles(dir: string): string[] {

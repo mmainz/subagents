@@ -44,6 +44,19 @@ function isTerminal(record: AgentRecord): boolean {
   );
 }
 
+function groupVisibleRecords(
+  records: AgentRecord[],
+  finished: Map<string, number>,
+) {
+  return {
+    running: records.filter((record) => record.status === "running"),
+    queued: records.filter((record) => record.status === "queued"),
+    finished: records.filter(
+      (record) => isTerminal(record) && finished.has(record.id),
+    ),
+  };
+}
+
 export class AgentWidget {
   private ctx?: ExtensionContext;
   private timer?: NodeJS.Timeout;
@@ -102,18 +115,12 @@ export class AgentWidget {
   update() {
     if (!this.ctx?.hasUI) return;
     this.pruneFinished();
-    const records = this.manager.listAgents();
-    const running = records.filter((record) => record.status === "running");
-    const queued = records.filter((record) => record.status === "queued");
-    const visibleFinished = records.filter(
-      (record) => isTerminal(record) && this.finished.has(record.id),
+    const { running, queued, finished } = groupVisibleRecords(
+      this.manager.listAgents(),
+      this.finished,
     );
 
-    if (
-      running.length === 0 &&
-      queued.length === 0 &&
-      visibleFinished.length === 0
-    ) {
+    if (running.length === 0 && queued.length === 0 && finished.length === 0) {
       this.ctx.ui.setWidget("subagents", undefined);
       this.ctx.ui.setStatus("subagents", undefined);
       this.widgetRegistered = false;
@@ -169,11 +176,9 @@ export class AgentWidget {
   }
 
   private render(width: number, theme: any): string[] {
-    const records = this.manager.listAgents();
-    const running = records.filter((record) => record.status === "running");
-    const queued = records.filter((record) => record.status === "queued");
-    const finished = records.filter(
-      (record) => isTerminal(record) && this.finished.has(record.id),
+    const { running, queued, finished } = groupVisibleRecords(
+      this.manager.listAgents(),
+      this.finished,
     );
 
     const countText = formatCounts(
